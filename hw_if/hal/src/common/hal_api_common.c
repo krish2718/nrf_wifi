@@ -104,6 +104,7 @@ enum nrf_wifi_status hal_rpu_ps_wake(struct nrf_wifi_hal_dev_ctx *hal_dev_ctx)
 				      rpu_ps_state_mask);
 #ifdef NRF_WIFI_RPU_RECOVERY
 		nrf_wifi_osal_tasklet_schedule(hal_dev_ctx->recovery_tasklet);
+		hal_dev_ctx->rpu_not_ready_count++;
 #endif /* NRF_WIFI_RPU_RECOVERY */
 		goto out;
 	}
