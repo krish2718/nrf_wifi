@@ -274,6 +274,8 @@ struct nrf_wifi_hal_dev_ctx {
 	void *rpu_ps_timer;
 	/** RPU power state lock */
 	void *rpu_ps_lock;
+	/** Last activity timestamp (ms) - updated on each operation */
+	unsigned long last_activity_time_ms;
 	/** Debug enable flag */
 	bool dbg_enable;
 	/** IRQ context flag */

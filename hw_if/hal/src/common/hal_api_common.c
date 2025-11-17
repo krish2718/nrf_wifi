@@ -139,11 +139,44 @@ static void hal_rpu_ps_sleep(unsigned long data)
 {
 	struct nrf_wifi_hal_dev_ctx *hal_dev_ctx = NULL;
 	unsigned long flags = 0;
+	unsigned long current_time_ms = 0;
+	unsigned long time_since_activity_ms = 0;
 
 	hal_dev_ctx = (struct nrf_wifi_hal_dev_ctx *)data;
 
 	nrf_wifi_osal_spinlock_irq_take(hal_dev_ctx->rpu_ps_lock,
 					&flags);
+
+	/* Check if RPU is still in AWAKE state. If not, it means
+	 * a new operation started after the timer was scheduled
+	 * but before it fired, and that operation already woke
+	 * the RPU. In this case, we should not put it to sleep.
+	 */
+	if (hal_dev_ctx->rpu_ps_state != RPU_PS_STATE_AWAKE) {
+		nrf_wifi_osal_spinlock_irq_rel(hal_dev_ctx->rpu_ps_lock,
+					       &flags);
+		return;
+	}
+
+	/* Check if there's been recent activity. If an operation
+	 * happened recently (within the timeout window), we should
+	 * not put the RPU to sleep as it indicates active traffic.
+	 */
+	current_time_ms = nrf_wifi_osal_time_get_curr_ms();
+	time_since_activity_ms = current_time_ms -
+				hal_dev_ctx->last_activity_time_ms;
+
+	if (time_since_activity_ms < NRF70_RPU_PS_IDLE_TIMEOUT_MS) {
+		/* Recent activity detected - reschedule timer instead
+		 * of sleeping. This ensures RPU stays awake during
+		 * active traffic.
+		 */
+		nrf_wifi_osal_spinlock_irq_rel(hal_dev_ctx->rpu_ps_lock,
+					       &flags);
+		nrf_wifi_osal_timer_schedule(hal_dev_ctx->rpu_ps_timer,
+					    NRF70_RPU_PS_IDLE_TIMEOUT_MS);
+		return;
+	}
 
 	nrf_wifi_bal_rpu_ps_sleep(hal_dev_ctx->bal_dev_ctx);
 #ifdef NRF_WIFI_RPU_RECOVERY
@@ -190,6 +223,7 @@ enum nrf_wifi_status hal_rpu_ps_init(struct nrf_wifi_hal_dev_ctx *hal_dev_ctx)
 				 (unsigned long)hal_dev_ctx);
 
 	hal_dev_ctx->rpu_ps_state = RPU_PS_STATE_ASLEEP;
+	hal_dev_ctx->last_activity_time_ms = nrf_wifi_osal_time_get_curr_ms();
 	hal_dev_ctx->dbg_enable = true;
 
 	status = NRF_WIFI_STATUS_SUCCESS;

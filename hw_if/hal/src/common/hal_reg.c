@@ -89,11 +89,22 @@ enum nrf_wifi_status hal_rpu_reg_read(struct nrf_wifi_hal_dev_ctx *hal_dev_ctx,
 	status = NRF_WIFI_STATUS_SUCCESS;
 out:
 #ifdef NRF_WIFI_LOW_POWER
+	/* Update activity timestamp and cancel timer while holding
+	 * the lock to ensure atomicity with respect to other
+	 * operations.
+	 */
+	if (status == NRF_WIFI_STATUS_SUCCESS) {
+		hal_dev_ctx->last_activity_time_ms =
+			nrf_wifi_osal_time_get_curr_ms();
+		nrf_wifi_osal_timer_kill(hal_dev_ctx->rpu_ps_timer);
+	}
+
 	nrf_wifi_osal_spinlock_irq_rel(hal_dev_ctx->rpu_ps_lock,
 				       &flags);
 
 	/* Schedule sleep timer after releasing the lock to prevent
-	 * it from firing during the critical section.
+	 * it from firing during the critical section. The timer
+	 * was already cancelled while holding the lock above.
 	 */
 	if (status == NRF_WIFI_STATUS_SUCCESS) {
 		nrf_wifi_osal_timer_schedule(hal_dev_ctx->rpu_ps_timer,
@@ -157,11 +168,22 @@ enum nrf_wifi_status hal_rpu_reg_write(struct nrf_wifi_hal_dev_ctx *hal_dev_ctx,
 
 #ifdef NRF_WIFI_LOW_POWER
 out:
+	/* Update activity timestamp and cancel timer while holding
+	 * the lock to ensure atomicity with respect to other
+	 * operations.
+	 */
+	if (status == NRF_WIFI_STATUS_SUCCESS) {
+		hal_dev_ctx->last_activity_time_ms =
+			nrf_wifi_osal_time_get_curr_ms();
+		nrf_wifi_osal_timer_kill(hal_dev_ctx->rpu_ps_timer);
+	}
+
 	nrf_wifi_osal_spinlock_irq_rel(hal_dev_ctx->rpu_ps_lock,
 				       &flags);
 
 	/* Schedule sleep timer after releasing the lock to prevent
-	 * it from firing during the critical section.
+	 * it from firing during the critical section. The timer
+	 * was already cancelled while holding the lock above.
 	 */
 	if (status == NRF_WIFI_STATUS_SUCCESS) {
 		nrf_wifi_osal_timer_schedule(hal_dev_ctx->rpu_ps_timer,
